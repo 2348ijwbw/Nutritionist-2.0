@@ -1,0 +1,631 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Satt – satt abnehmen</title>
+<meta name="theme-color" content="#17211c" />
+<link rel="manifest" href="manifest.json" />
+<link rel="apple-touch-icon" href="apple-touch-icon.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Satt" />
+<style>html,body{margin:0;background:#e7ebe2}</style>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useRef } = React;
+
+const store = {
+  async get(k){ try{ const v = localStorage.getItem(k); return v==null?null:{value:v}; }catch(e){ return null; } },
+  async set(k,v){ try{ localStorage.setItem(k,v); }catch(e){} return {}; }
+};
+
+
+/*  SATT — Ivans persönlicher Ernährungs-Coach
+    Ziel: ~10 kg abnehmen, ohne hungrig zu sein · weniger Fleisch
+    Wochenplan + Marken-Einkaufsliste für 22587 Hamburg (Blankenese) */
+
+const CSS = `
+@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800;900&family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
+
+:root{
+  --ink:#17211c; --paper:#e7ebe2; --card:#f6f8f2; --card2:#eef1e8;
+  --volt:#c6e600; --forest:#2e5d3b; --steel:#2f6e8f; --brick:#9e3b2a;
+  --amber:#e0a000; --olive:#6b7a2e; --line:#c8cec0; --muted:#5b6a5d;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+.na-root{font-family:'IBM Plex Sans',system-ui,sans-serif;color:var(--ink);
+  background:var(--paper);min-height:100vh;line-height:1.45}
+.na-wrap{max-width:480px;margin:0 auto;padding:0 0 92px;position:relative}
+.na-mono{font-family:'IBM Plex Mono',ui-monospace,monospace}
+.na-disp{font-family:'Archivo',sans-serif}
+
+/* header */
+.na-top{padding:22px 20px 14px;border-bottom:2px solid var(--ink);background:var(--paper);
+  position:sticky;top:0;z-index:5}
+.na-brand{display:flex;align-items:center;gap:10px}
+.na-brand .appicon{width:36px;height:36px;border-radius:10px;object-fit:cover;border:2px solid var(--ink);flex:0 0 auto}
+.na-brand h1{font-family:'Archivo';font-weight:900;font-size:30px;letter-spacing:-.02em;margin:0;
+  text-transform:uppercase}
+.na-brand .dot{width:12px;height:12px;background:var(--volt);border:2px solid var(--ink);
+  border-radius:50%;transform:translateY(-2px)}
+.na-sub{font-size:12px;color:var(--muted);margin-top:3px;letter-spacing:.01em}
+
+.na-screen{padding:16px 16px 4px;animation:fade .25s ease}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+/* labels + cards */
+.lbl{font-family:'IBM Plex Mono';font-weight:600;font-size:10.5px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--muted)}
+.card{background:var(--card);border:1.5px solid var(--ink);border-radius:14px;padding:16px;margin-bottom:14px}
+.card.tight{padding:13px}
+
+/* fuel / nutrition-label panel */
+.fuel{background:var(--ink);color:var(--paper);border-radius:16px;padding:18px 18px 16px;margin-bottom:14px}
+.fuel .cap{font-family:'IBM Plex Mono';font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--volt)}
+.fuel .big{font-family:'Archivo';font-weight:900;font-size:58px;line-height:.92;letter-spacing:-.03em;margin:6px 0 0}
+.fuel .big small{font-family:'IBM Plex Mono';font-size:15px;font-weight:600;letter-spacing:.02em;
+  margin-left:6px;color:var(--volt)}
+.fuel .rule{height:2px;background:var(--volt);margin:14px 0 12px}
+.macros{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.macro{border:1px solid #3a463c;border-radius:10px;padding:9px 8px;text-align:center}
+.macro .m{font-family:'Archivo';font-weight:800;font-size:22px}
+.macro .u{font-family:'IBM Plex Mono';font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:#a7b0a2}
+
+.pace{display:flex;gap:8px;margin-top:12px}
+.pace .p{flex:1;background:#222d26;border-radius:10px;padding:9px 8px}
+.pace .p .v{font-family:'Archivo';font-weight:800;font-size:17px}
+.pace .p .k{font-family:'IBM Plex Mono';font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:#a7b0a2;margin-top:1px}
+
+/* inputs */
+.field{margin-bottom:12px}
+.field label{display:block;margin-bottom:5px}
+.inp{width:100%;font-family:'IBM Plex Mono';font-weight:600;font-size:17px;color:var(--ink);
+  background:var(--card2);border:1.5px solid var(--line);border-radius:10px;padding:11px 13px;outline:none}
+.inp:focus{border-color:var(--ink)}
+.seg{display:flex;gap:6px;flex-wrap:wrap}
+.seg button{flex:1;min-width:64px;font-family:'IBM Plex Sans';font-weight:600;font-size:12.5px;
+  padding:9px 6px;border:1.5px solid var(--line);border-radius:10px;background:var(--card2);color:var(--ink);cursor:pointer}
+.seg button.on{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+
+/* day chips + plan */
+.days{display:flex;gap:6px;overflow-x:auto;padding:2px 0 6px;margin-bottom:12px;scrollbar-width:none}
+.days::-webkit-scrollbar{display:none}
+.dchip{flex:0 0 auto;font-family:'Archivo';font-weight:800;font-size:13px;padding:8px 13px;border-radius:11px;
+  border:1.5px solid var(--ink);background:var(--card);cursor:pointer;text-transform:uppercase;letter-spacing:.01em}
+.dchip.on{background:var(--volt)}
+.badge{display:inline-flex;align-items:center;gap:5px;font-family:'IBM Plex Mono';font-weight:600;font-size:10px;
+  letter-spacing:.08em;text-transform:uppercase;color:#fff;padding:4px 9px;border-radius:20px}
+
+.meal{border-top:1px solid var(--line);padding:12px 0}
+.meal:first-of-type{border-top:none}
+.meal .slot{font-family:'IBM Plex Mono';font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.meal .nm{font-weight:700;font-size:15px;margin:2px 0 3px}
+.meal .it{font-size:12.5px;color:var(--muted)}
+.meal .row{display:flex;justify-content:space-between;align-items:flex-end;gap:10px;margin-top:7px}
+.kp{font-family:'IBM Plex Mono';font-weight:600;font-size:11.5px}
+.kp b{color:var(--forest)}
+.sat{display:flex;gap:3px;align-items:center}
+.sat i{width:7px;height:14px;border-radius:2px;background:var(--line);display:block}
+.sat i.f{background:var(--volt);border:1px solid var(--ink)}
+.sat .t{font-family:'IBM Plex Mono';font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-left:4px}
+
+.daytot{display:flex;gap:8px;margin:2px 0 4px}
+.daytot .b{flex:1;background:var(--card2);border:1.5px solid var(--ink);border-radius:11px;padding:10px;text-align:center}
+.daytot .b .v{font-family:'Archivo';font-weight:800;font-size:22px}
+.daytot .b .u{font-family:'IBM Plex Mono';font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+
+/* shopping */
+.grp{margin-bottom:6px}
+.grp h3{font-family:'Archivo';font-weight:800;font-size:14px;text-transform:uppercase;letter-spacing:.01em;
+  margin:16px 0 8px;display:flex;align-items:center;gap:8px}
+.grp h3 .cnt{font-family:'IBM Plex Mono';font-size:10px;color:var(--muted);font-weight:600}
+.item{display:flex;gap:11px;align-items:flex-start;padding:11px 0;border-top:1px solid var(--line)}
+.item:first-child{border-top:none}
+.cb{flex:0 0 auto;width:22px;height:22px;border:1.5px solid var(--ink);border-radius:6px;background:var(--card);
+  cursor:pointer;display:flex;align-items:center;justify-content:center;margin-top:1px}
+.cb.on{background:var(--volt)}
+.cb svg{width:14px;height:14px}
+.item .nm{font-weight:600;font-size:14px}
+.item.done .nm{text-decoration:line-through;color:var(--muted)}
+.item .br{font-size:12px;color:var(--forest);font-weight:500;margin-top:1px}
+.item .meta{font-family:'IBM Plex Mono';font-size:10px;color:var(--muted);letter-spacing:.02em;margin-top:3px;
+  display:flex;gap:8px;flex-wrap:wrap}
+.qtytag{background:var(--card2);border:1px solid var(--line);border-radius:5px;padding:1px 6px}
+
+.store{display:flex;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
+.store:first-child{border-top:none}
+.store .pin{font-family:'Archivo';font-weight:900;font-size:11px;background:var(--ink);color:var(--paper);
+  border-radius:7px;padding:6px 8px;height:fit-content;white-space:nowrap}
+.store .nm{font-weight:700;font-size:14px}
+.store .ad{font-size:12px;color:var(--muted)}
+.store .no{font-family:'IBM Plex Mono';font-size:10.5px;color:var(--forest);margin-top:2px}
+
+/* coach */
+.chat{display:flex;flex-direction:column;gap:10px;margin-bottom:12px}
+.bub{max-width:86%;padding:11px 13px;border-radius:14px;font-size:14px;white-space:pre-wrap}
+.bub.u{align-self:flex-end;background:var(--ink);color:var(--paper);border-bottom-right-radius:4px}
+.bub.a{align-self:flex-start;background:var(--card);border:1.5px solid var(--ink);border-bottom-left-radius:4px}
+.sugg{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:10px}
+.sugg button{font-size:12px;font-weight:600;padding:8px 11px;border:1.5px solid var(--ink);border-radius:20px;
+  background:var(--card);cursor:pointer;text-align:left}
+.ask{display:flex;gap:8px;position:sticky;bottom:96px}
+.ask input{flex:1;font-size:14px;padding:12px;border:1.5px solid var(--ink);border-radius:12px;background:var(--card);outline:none}
+.send{background:var(--volt);border:1.5px solid var(--ink);border-radius:12px;padding:0 16px;font-family:'Archivo';
+  font-weight:800;cursor:pointer;font-size:14px}
+.send:disabled{opacity:.5}
+
+.note{font-size:12px;color:var(--muted);background:var(--card2);border:1px dashed var(--line);
+  border-radius:11px;padding:11px 13px;margin-bottom:14px}
+.note b{color:var(--ink)}
+
+.prin{display:flex;gap:10px;padding:9px 0;border-top:1px solid var(--line)}
+.prin:first-of-type{border-top:none}
+.prin .n{font-family:'Archivo';font-weight:900;font-size:14px;color:var(--forest);flex:0 0 22px}
+.prin .tx{font-size:13px}
+.prin .tx b{font-weight:700}
+
+/* bottom nav */
+.nav{position:fixed;bottom:0;left:0;right:0;max-width:480px;margin:0 auto;background:var(--card);
+  border-top:2px solid var(--ink);display:grid;grid-template-columns:repeat(3,1fr);z-index:10}
+.nav button{background:none;border:none;padding:10px 4px 12px;cursor:pointer;display:flex;flex-direction:column;
+  align-items:center;gap:3px;color:var(--muted);font-family:'IBM Plex Sans';font-weight:600;font-size:10.5px}
+.nav button.on{color:var(--ink)}
+.nav button.on .ico{background:var(--volt)}
+.nav .ico{width:38px;height:30px;border-radius:9px;display:flex;align-items:center;justify-content:center;
+  border:1.5px solid transparent}
+.nav button.on .ico{border-color:var(--ink)}
+.nav svg{width:19px;height:19px}
+`;
+
+const CHECK = <svg viewBox="0 0 24 24" fill="none" stroke="#17211c" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="4 12 10 18 20 6"/></svg>;
+
+const ICON = "data:image/jpeg;base64,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";
+
+const ACT = [
+  { k: "leicht", label: "Alltag", f: 1.35, d: "wenig Sport" },
+  { k: "3x", label: "3× Woche", f: 1.5, d: "Training" },
+  { k: "45", label: "4–5× Woche", f: 1.65, d: "dein Standard" },
+  { k: "6x", label: "6×+", f: 1.8, d: "Doppel-Einh." },
+];
+const PACE = [
+  { k: "sanft", label: "Sanft", r: 0.5, d: "0,5 kg/Wo" },
+  { k: "empf", label: "Empfohlen", r: 0.7, d: "0,7 kg/Wo" },
+  { k: "ambi", label: "Ambitioniert", r: 0.83, d: "10 kg / 3 Mon." },
+];
+
+const FOCUS = {
+  Fisch: "var(--steel)", Pflanzlich: "var(--forest)", Fleisch: "var(--brick)",
+  Vegetarisch: "var(--olive)",
+};
+
+const PLAN = [
+  { tag: "Mo", focus: "Fisch", meals: [
+    { slot: "Frühstück", nm: "Skyr-Beeren-Bowl", it: "250 g Skyr · 60 g Haferflocken · 100 g Beeren · 15 g Mandeln · Zimt", kcal: 470, protein: 45, sat: 5 },
+    { slot: "Snack", nm: "Quark & Banane", it: "200 g Magerquark · 1 Banane · Zimt", kcal: 250, protein: 26, sat: 4 },
+    { slot: "Mittag", nm: "Rote-Linsen-Dal", it: "100 g rote Linsen · 80 g Vollkornreis · Spinat · Tomaten", kcal: 630, protein: 34, sat: 5 },
+    { slot: "Snack", nm: "Apfel & Walnüsse", it: "1 Apfel · 25 g Walnüsse", kcal: 230, protein: 6, sat: 3 },
+    { slot: "Abend", nm: "Ofen-Lachs", it: "150 g Lachs · 300 g Ofengemüse · 250 g Kartoffeln", kcal: 700, protein: 48, sat: 5 },
+  ]},
+  { tag: "Di", focus: "Pflanzlich", meals: [
+    { slot: "Frühstück", nm: "Protein-Oats", it: "70 g Haferflocken · 150 g Magerquark · Milch · Banane", kcal: 520, protein: 38, sat: 4 },
+    { slot: "Snack", nm: "Skyr & Beeren", it: "250 g Skyr · 100 g Beeren", kcal: 210, protein: 30, sat: 4 },
+    { slot: "Mittag", nm: "Kichererbsen-Curry", it: "1 Dose Kichererbsen · 80 g Vollkornreis · Gemüse · Kokosmilch light", kcal: 640, protein: 30, sat: 5 },
+    { slot: "Snack", nm: "Gemüse & Hummus", it: "Paprika/Gurke · 60 g Hummus", kcal: 190, protein: 7, sat: 3 },
+    { slot: "Abend", nm: "Tofu-Pfanne", it: "200 g Taifun Tofu · 400 g Gemüse · 60 g Vollkornnudeln", kcal: 630, protein: 42, sat: 5 },
+  ]},
+  { tag: "Mi", focus: "Fleisch", meals: [
+    { slot: "Frühstück", nm: "Rührei-Brot", it: "3 Eier · 2 Scheiben Vollkornbrot · Tomate", kcal: 480, protein: 32, sat: 4 },
+    { slot: "Snack", nm: "Quark & Apfel", it: "200 g Magerquark · 1 Apfel", kcal: 220, protein: 25, sat: 4 },
+    { slot: "Mittag", nm: "Hähnchen-Bowl", it: "150 g Hähnchenbrust · 80 g Vollkornreis · viel Gemüse · Joghurt-Dressing", kcal: 660, protein: 52, sat: 5 },
+    { slot: "Snack", nm: "Banane & Mandeln", it: "1 Banane · 20 g Mandeln", kcal: 210, protein: 6, sat: 2 },
+    { slot: "Abend", nm: "Linsen-Bolognese", it: "60 g Vollkornnudeln · rote Linsen · passierte Tomaten · Salat", kcal: 620, protein: 30, sat: 5 },
+  ]},
+  { tag: "Do", focus: "Fisch", meals: [
+    { slot: "Frühstück", nm: "Skyr-Bowl", it: "250 g Skyr · 60 g Haferflocken · 100 g Beeren", kcal: 450, protein: 42, sat: 5 },
+    { slot: "Snack", nm: "Eier & Apfel", it: "2 Eier hartgekocht · 1 Apfel", kcal: 220, protein: 14, sat: 3 },
+    { slot: "Mittag", nm: "Kabeljau & Kartoffeln", it: "180 g Kabeljau · 300 g Kartoffeln · Erbsen/Möhren · Kräuterquark", kcal: 620, protein: 48, sat: 5 },
+    { slot: "Snack", nm: "Quark & Beeren", it: "200 g Magerquark · 100 g Beeren", kcal: 190, protein: 24, sat: 4 },
+    { slot: "Abend", nm: "Bohnen-Chili", it: "Kidneybohnen · Mais · Paprika · passierte Tomaten · 60 g Vollkornreis", kcal: 640, protein: 28, sat: 5 },
+  ]},
+  { tag: "Fr", focus: "Vegetarisch", meals: [
+    { slot: "Frühstück", nm: "Protein-Oats", it: "60 g Haferflocken · 150 g Magerquark · Milch · Beeren", kcal: 500, protein: 40, sat: 5 },
+    { slot: "Snack", nm: "Banane & Walnüsse", it: "1 Banane · 25 g Walnüsse", kcal: 250, protein: 6, sat: 2 },
+    { slot: "Mittag", nm: "Shakshuka", it: "3 Eier · passierte Tomaten · Paprika · 2 Scheiben Vollkornbrot", kcal: 620, protein: 34, sat: 5 },
+    { slot: "Snack", nm: "Skyr & Honig", it: "250 g Skyr · 1 TL Honig", kcal: 200, protein: 28, sat: 4 },
+    { slot: "Abend", nm: "Süßkartoffel & Tofu", it: "200 g Tofu · 300 g Süßkartoffel · Brokkoli", kcal: 640, protein: 38, sat: 5 },
+  ]},
+  { tag: "Sa", focus: "Fleisch", meals: [
+    { slot: "Frühstück", nm: "Rührei-Bowl", it: "3 Eier · Gemüse · 1 Scheibe Vollkornbrot", kcal: 430, protein: 30, sat: 4 },
+    { slot: "Snack", nm: "Quark & Beeren", it: "200 g Magerquark · 100 g Beeren", kcal: 190, protein: 25, sat: 4 },
+    { slot: "Mittag", nm: "Hack-Pfanne", it: "150 g mageres Rind/Pute · 70 g Vollkornnudeln · Gemüse · Tomatensauce", kcal: 700, protein: 50, sat: 5 },
+    { slot: "Snack", nm: "Apfel & Mandeln", it: "1 Apfel · 20 g Mandeln", kcal: 190, protein: 6, sat: 3 },
+    { slot: "Abend", nm: "Großer Kraft-Salat", it: "Blattsalat · Kichererbsen · 2 Eier · 30 g Feta · Vollkornbrot", kcal: 620, protein: 34, sat: 5 },
+  ]},
+  { tag: "So", focus: "Pflanzlich", meals: [
+    { slot: "Frühstück", nm: "Protein-Pancakes", it: "60 g Haferflocken · 200 g Magerquark · 2 Eier · Beeren", kcal: 560, protein: 48, sat: 5 },
+    { slot: "Snack", nm: "Banane", it: "1 Banane", kcal: 105, protein: 1, sat: 2 },
+    { slot: "Mittag", nm: "Linsen-Salat", it: "rote/Beluga-Linsen · Gemüse · 30 g Feta · Vollkornbrot", kcal: 620, protein: 30, sat: 5 },
+    { slot: "Snack", nm: "Skyr & Nüsse", it: "250 g Skyr · 15 g Mandeln", kcal: 260, protein: 28, sat: 4 },
+    { slot: "Abend", nm: "Gemüse-Curry & Tofu", it: "200 g Tofu · Gemüse · 80 g Vollkornreis · Kokosmilch light", kcal: 660, protein: 38, sat: 5 },
+  ]},
+];
+
+const SHOP = [
+  { group: "Milch & Protein", items: [
+    { nm: "Magerquark", br: "Milbona (Lidl) / Gut&Günstig (Edeka)", qty: "2,5 kg", store: "Lidl · Edeka" },
+    { nm: "Skyr Natur", br: "Arla Skyr / Milbona Skyr (Lidl)", qty: "1,5 kg", store: "Rewe · Edeka · Lidl" },
+    { nm: "Eier (Bio/Freiland)", br: "GutBio (Aldi) / Rewe Bio", qty: "15 Stück", store: "Aldi · Rewe" },
+    { nm: "Naturjoghurt 1,5 %", br: "Gut&Günstig / Milbona", qty: "500 g", store: "Edeka · Lidl" },
+    { nm: "Feta light", br: "Patros / Salakis", qty: "1 Pckg.", store: "Rewe · Edeka" },
+  ]},
+  { group: "Pflanzliche Proteine – statt Fleisch", items: [
+    { nm: "Tofu Natur", br: "Taifun Tofu Natur", qty: "2× 200 g", store: "Rewe · Edeka · dm" },
+    { nm: "Rote Linsen", br: "dmBio / Alnatura", qty: "500 g", store: "dm · Edeka" },
+    { nm: "Kichererbsen (Dose)", br: "Bonduelle / Freshona (Lidl)", qty: "2 Dosen", store: "Rewe · Lidl" },
+    { nm: "Kidneybohnen (Dose)", br: "Gut&Günstig / Cucina (Aldi)", qty: "1 Dose", store: "Edeka · Aldi" },
+  ]},
+  { group: "Fisch – 2× die Woche", items: [
+    { nm: "Lachsfilet TK", br: "followfish / iglo", qty: "2 Filets", store: "Rewe · Edeka" },
+    { nm: "Kabeljau/Seelachs TK", br: "iglo Filegro / Costa", qty: "1 Pckg.", store: "Rewe · Edeka" },
+  ]},
+  { group: "Fleisch – nur 2× die Woche", items: [
+    { nm: "Hähnchenbrust", br: "Metzgerfrisch (Lidl) / Frischetheke", qty: "300 g", store: "Lidl · Edeka" },
+    { nm: "Mageres Rinderhack o. Pute", br: "Meine Metzgerei (Aldi) / Gut&Günstig", qty: "300 g", store: "Aldi · Edeka" },
+  ]},
+  { group: "Vollkorn & Beilagen", items: [
+    { nm: "Haferflocken", br: "Kölln Blütenzarte / Crownfield (Lidl)", qty: "500 g", store: "überall" },
+    { nm: "Vollkornreis", br: "Oryza / Golden Sun (Lidl)", qty: "1 kg", store: "Edeka · Lidl" },
+    { nm: "Vollkornnudeln", br: "Barilla Integrale / 3 Glocken", qty: "500 g", store: "Rewe · Edeka" },
+    { nm: "Kartoffeln", br: "lose, regional", qty: "2 kg", store: "Rewe · Edeka" },
+    { nm: "Süßkartoffeln", br: "lose", qty: "1 kg", store: "Rewe · Edeka" },
+    { nm: "Vollkorn-/Proteinbrot", br: "Mestemacher / Harry Vollkorn", qty: "1 Pckg.", store: "überall" },
+  ]},
+  { group: "Gemüse – Volumen = Sattheit", items: [
+    { nm: "Brokkoli", br: "frisch", qty: "2 Köpfe", store: "Rewe · Edeka" },
+    { nm: "Paprika", br: "frisch", qty: "4 Stück", store: "überall" },
+    { nm: "Zucchini", br: "frisch", qty: "2 Stück", store: "überall" },
+    { nm: "Blattspinat TK", br: "iglo / Gut&Günstig TK", qty: "1 kg", store: "Edeka · Lidl" },
+    { nm: "TK-Gemüsemix", br: "iglo / Freshona (Lidl)", qty: "1 kg", store: "Lidl · Edeka" },
+    { nm: "Passierte Tomaten", br: "Mutti / Gut&Günstig", qty: "2 Pckg.", store: "überall" },
+    { nm: "Tomaten · Gurke · Zwiebeln · Knoblauch", br: "frisch", qty: "Bedarf", store: "überall" },
+  ]},
+  { group: "Obst", items: [
+    { nm: "Äpfel", br: "frisch", qty: "7 Stück", store: "überall" },
+    { nm: "Bananen", br: "frisch", qty: "6 Stück", store: "überall" },
+    { nm: "TK-Beeren", br: "Freshona (Lidl) / Gut&Günstig", qty: "750 g", store: "Lidl · Edeka" },
+    { nm: "Zitrone", br: "frisch", qty: "2 Stück", store: "überall" },
+  ]},
+  { group: "Fette, Nüsse & Extras", items: [
+    { nm: "Mandeln", br: "Alesto (Lidl) / Seeberger", qty: "200 g", store: "Lidl · Edeka" },
+    { nm: "Walnüsse", br: "Alesto / ja! (Rewe)", qty: "150 g", store: "Lidl · Rewe" },
+    { nm: "Olivenöl", br: "Bertolli / Gut&Günstig", qty: "1 Flasche", store: "überall" },
+    { nm: "Hummus", br: "Obela / Gut&Günstig", qty: "1 Becher", store: "Rewe · Edeka" },
+    { nm: "Kokosmilch light", br: "Gut&Günstig / Bonduelle", qty: "2 Dosen", store: "Edeka · Rewe" },
+    { nm: "Gewürze (Kreuzkümmel, Paprika, Curry, Zimt)", br: "Ostmann / Fuchs", qty: "Bedarf", store: "überall" },
+  ]},
+];
+
+const STORES = [
+  { pin: "660 m", nm: "REWE Blankenese", ad: "Sülldorfer Kirchenweg 2b, 22587", no: "Mo–Sa 7–22 · Taifun, followfish, Arla, Barilla" },
+  { pin: "290 m", nm: "EDEKA Kröger", ad: "Blankeneser Bahnhofstraße 17, 22587", no: "Mo–Fr 8–20, Sa 8–18 · Frischetheke, Bio" },
+  { pin: "1,4 km", nm: "Lidl", ad: "Sülldorfer Landstraße 3, 22589", no: "Milbona · Freshona · Alesto · Metzgerfrisch – günstig" },
+  { pin: "1,9 km", nm: "Aldi Nord", ad: "Op'n Hainholt 2b, 22589", no: "GutBio · Meine Metzgerei – günstig" },
+  { pin: "300 m", nm: "dm", ad: "Blankeneser Bahnhofstraße", no: "Taifun Tofu · dmBio Linsen/Kichererbsen · Proteinpulver" },
+];
+
+const PRINCIPLES = [
+  { n: "1", t: "Eiweiß zuerst.", d: "In jeder Mahlzeit Quark, Skyr, Eier, Tofu, Linsen oder Fisch – Eiweiß macht am längsten satt und schützt beim Abnehmen deine Muskeln fürs Training." },
+  { n: "2", t: "Volumen essen.", d: "Viel Gemüse, Salat, Kartoffeln, Beeren. Große Portionen mit wenig Kalorien füllen den Magen – du isst dich satt, nicht hungrig." },
+  { n: "3", t: "Ballaststoffe.", d: "Haferflocken, Hülsenfrüchte, Vollkorn. Sie verdauen langsam und halten den Blutzucker ruhig – kein Heißhunger nach 2 Stunden." },
+  { n: "4", t: "Weniger Fleisch.", d: "Nur 2× die Woche Fleisch. Der Rest läuft über Fisch, Eier, Tofu und Hülsenfrüchte – günstiger, sättigend und trotzdem eiweißreich." },
+  { n: "5", t: "Moderat, nicht extrem.", d: "Nie unter deinen Grundumsatz. Ein zu großes Defizit macht Heißhunger, killt die Leistung im Dojo und bringt den Jojo-Effekt." },
+];
+
+const KEY = "satt:v1";
+const DEFAULT = { weight: 85, height: 178, age: 17, sex: "m", act: "45", pace: "empf" };
+
+function calc(p) {
+  const w = +p.weight || 85, h = +p.height || 178, a = +p.age || 17;
+  const bmr = Math.round(10 * w + 6.25 * h - 5 * a + (p.sex === "m" ? 5 : -161));
+  const f = (ACT.find(x => x.k === p.act) || ACT[2]).f;
+  const tdee = Math.round(bmr * f);
+  const rate = (PACE.find(x => x.k === p.pace) || PACE[1]).r;
+  const floor = Math.max(1700, bmr);
+  let target = Math.round((tdee - rate * 7700 / 7) / 10) * 10;
+  const clamped = target < floor;
+  if (clamped) target = floor;
+  const effRate = (tdee - target) * 7 / 7700;
+  const weeks = effRate > 0 ? Math.ceil(10 / effRate) : 0;
+  const protein = Math.round(1.8 * w);
+  const fat = Math.round(0.8 * w);
+  const carb = Math.max(0, Math.round((target - protein * 4 - fat * 9) / 4));
+  const done = new Date(); done.setDate(done.getDate() + weeks * 7);
+  const date = done.toLocaleDateString("de-DE", { day: "2-digit", month: "short", year: "numeric" });
+  const pf = Math.min(1.4, Math.max(0.7, target / 2300));
+  return { bmr, tdee, target, protein, fat, carb, weeks, date, clamped, effRate, pf };
+}
+
+function App() {
+  const [tab, setTab] = useState("plan");
+  const [p, setP] = useState(DEFAULT);
+  const [checked, setChecked] = useState({});
+  const [day, setDay] = useState(0);
+  const loaded = useRef(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await store.get(KEY);
+        if (r && r.value) {
+          const s = JSON.parse(r.value);
+          if (s.p) setP({ ...DEFAULT, ...s.p });
+          if (s.checked) setChecked(s.checked);
+        }
+      } catch (e) { /* erster Start – noch nichts gespeichert */ }
+      loaded.current = true;
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (!loaded.current) return;
+    (async () => {
+      try { await store.set(KEY, JSON.stringify({ p, checked }), false); } catch (e) {}
+    })();
+  }, [p, checked]);
+
+  const c = calc(p);
+  const set = (k, v) => setP(o => ({ ...o, [k]: v }));
+
+  return (
+    <div className="na-root">
+      <style>{CSS}</style>
+      <div className="na-wrap">
+        <header className="na-top">
+          <div className="na-brand">
+            <img className="appicon" src={ICON} alt="Satt" />
+            <h1>Satt</h1><span className="dot" />
+            <span style={{ fontFamily: "'IBM Plex Mono'", fontSize: 11, color: "var(--muted)", marginLeft: "auto", fontWeight: 600, letterSpacing: ".08em" }}>−10 KG</span>
+          </div>
+          <div className="na-sub">Satt abnehmen · weniger Fleisch · 22587 Hamburg</div>
+        </header>
+
+        {tab === "plan" && <PlanTab c={c} day={day} setDay={setDay} />}
+        {tab === "shop" && <ShopTab c={c} checked={checked} setChecked={setChecked} />}
+        {tab === "you" && <YouTab c={c} p={p} set={set} />}
+      </div>
+
+      <nav className="nav">
+        {[
+          { k: "plan", l: "Plan", ic: <><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></> },
+          { k: "shop", l: "Einkauf", ic: <><path d="M6 6h15l-1.5 9h-12z"/><circle cx="9" cy="20" r="1"/><circle cx="18" cy="20" r="1"/><path d="M6 6 5 3H2"/></> },
+          { k: "you", l: "Ich", ic: <><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></> },
+        ].map(n => (
+          <button key={n.k} className={tab === n.k ? "on" : ""} onClick={() => setTab(n.k)}>
+            <span className="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{n.ic}</svg></span>
+            {n.l}
+          </button>
+        ))}
+      </nav>
+    </div>
+  );
+}
+
+function SatBar({ n }) {
+  return (
+    <div className="sat">
+      {[1,2,3,4,5].map(i => <i key={i} className={i <= n ? "f" : ""} />)}
+      <span className="t">satt</span>
+    </div>
+  );
+}
+
+function PlanTab({ c, day, setDay }) {
+  const d = PLAN[day];
+  const raw = d.meals.reduce((a, m) => ({ k: a.k + m.kcal, p: a.p + m.protein }), { k: 0, p: 0 });
+  const kcal = Math.round(raw.k * c.pf / 10) * 10;
+  const prot = Math.round(raw.p * c.pf);
+  const avgSat = (d.meals.reduce((a, m) => a + m.sat, 0) / d.meals.length).toFixed(1);
+
+  return (
+    <div className="na-screen">
+      <div className="note">
+        <b>Ohne Hunger abnehmen</b> heißt nicht weniger essen, sondern <b>klüger</b> essen. Der Plan ist auf Sättigung gebaut – volle Portionen, viel Eiweiß, wenig Fleisch. Portionen sind auf dein Ziel skaliert (×{c.pf.toFixed(2)}).
+      </div>
+
+      <div className="days">
+        {PLAN.map((x, i) => (
+          <button key={i} className={"dchip" + (i === day ? " on" : "")} onClick={() => setDay(i)}>{x.tag}</button>
+        ))}
+      </div>
+
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+        <span className="badge" style={{ background: FOCUS[d.focus] }}>{d.focus === "Fleisch" ? "Fleisch-Tag" : d.focus}</span>
+        <span className="kp">Ø <b>{avgSat}</b>/5 Sättigung</span>
+      </div>
+
+      <div className="daytot">
+        <div className="b"><div className="v">{kcal}</div><div className="u">kcal</div></div>
+        <div className="b"><div className="v">{prot} g</div><div className="u">Eiweiß</div></div>
+        <div className="b"><div className="v">{Math.round(kcal - c.target)}</div><div className="u">vs Ziel</div></div>
+      </div>
+
+      <div className="card">
+        {d.meals.map((m, i) => (
+          <div className="meal" key={i}>
+            <div className="slot">{m.slot}</div>
+            <div className="nm">{m.nm}</div>
+            <div className="it">{m.it}</div>
+            <div className="row">
+              <span className="kp"><b>{Math.round(m.kcal * c.pf)}</b> kcal · <b>{Math.round(m.protein * c.pf)} g</b> Eiweiß</span>
+              <SatBar n={m.sat} />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="lbl" style={{ margin: "18px 4px 8px" }}>Warum du satt bleibst</div>
+      <div className="card">
+        {PRINCIPLES.map((x, i) => (
+          <div className="prin" key={i}>
+            <div className="n">{x.n}</div>
+            <div className="tx"><b>{x.t}</b> {x.d}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ShopTab({ c, checked, setChecked }) {
+  const total = SHOP.reduce((a, g) => a + g.items.length, 0);
+  const done = Object.values(checked).filter(Boolean).length;
+  const toggle = (id) => setChecked(o => ({ ...o, [id]: !o[id] }));
+
+  return (
+    <div className="na-screen">
+      <div className="fuel" style={{ background: "var(--forest)" }}>
+        <div className="cap" style={{ color: "var(--volt)" }}>Wocheneinkauf · 1 Person</div>
+        <div className="big" style={{ fontSize: 46 }}>{done}<small style={{ color: "var(--volt)" }}>/ {total} erledigt</small></div>
+        <div style={{ fontFamily: "'IBM Plex Sans'", fontSize: 12.5, marginTop: 8, color: "#dfe7d9" }}>
+          Alle Marken sind in deinem Umkreis (22587) erhältlich. Discounter-Marken (Milbona, Alesto, GutBio) sparen am meisten.
+        </div>
+      </div>
+
+      {SHOP.map((g, gi) => (
+        <div className="grp" key={gi}>
+          <h3>{g.group} <span className="cnt">{g.items.length}</span></h3>
+          <div className="card tight">
+            {g.items.map((it, ii) => {
+              const id = gi + "-" + ii;
+              const on = !!checked[id];
+              return (
+                <div className={"item" + (on ? " done" : "")} key={id} onClick={() => toggle(id)}>
+                  <div className={"cb" + (on ? " on" : "")}>{on && CHECK}</div>
+                  <div style={{ flex: 1 }}>
+                    <div className="nm">{it.nm}</div>
+                    <div className="br">{it.br}</div>
+                    <div className="meta">
+                      <span className="qtytag">{it.qty}</span>
+                      <span>📍 {it.store}</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+
+      <div className="lbl" style={{ margin: "18px 4px 8px" }}>Läden in deiner Nähe</div>
+      <div className="card tight">
+        {STORES.map((s, i) => (
+          <div className="store" key={i}>
+            <div className="pin">{s.pin}</div>
+            <div>
+              <div className="nm">{s.nm}</div>
+              <div className="ad">{s.ad}</div>
+              <div className="no">{s.no}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="note" style={{ marginTop: 14 }}>
+        Entfernungen ab Blankeneser Bahnhof, ungefähr. Öffnungszeiten können sich ändern – kurz prüfen lohnt sich.
+      </div>
+    </div>
+  );
+}
+
+function YouTab({ c, p, set }) {
+  return (
+    <div className="na-screen">
+      <div className="fuel">
+        <div className="cap">Dein Tagesziel</div>
+        <div className="big">{c.target}<small>kcal / Tag</small></div>
+        <div className="rule" />
+        <div className="macros">
+          <div className="macro"><div className="m">{c.protein}</div><div className="u">g Eiweiß</div></div>
+          <div className="macro"><div className="m">{c.carb}</div><div className="u">g Kohlenh.</div></div>
+          <div className="macro"><div className="m">{c.fat}</div><div className="u">g Fett</div></div>
+        </div>
+        <div className="pace">
+          <div className="p"><div className="v">{c.tdee}</div><div className="k">Verbrauch/Tag</div></div>
+          <div className="p"><div className="v">~{c.weeks} Wo</div><div className="k">bis −10 kg</div></div>
+          <div className="p"><div className="v">{c.date}</div><div className="k">Zieldatum</div></div>
+        </div>
+      </div>
+
+      {c.clamped && (
+        <div className="note"><b>Tempo gedrosselt.</b> Dein gewähltes Tempo läge unter dem Grundumsatz ({c.bmr} kcal). Das wäre zu aggressiv – für Muskeln, Training und gegen den Jojo-Effekt bleibt das Ziel bei mind. {c.target} kcal.</div>
+      )}
+      {(+p.age || 17) < 18 && (
+        <div className="note">Du bist noch im Wachstum und trainierst hart – iss genug, nie unter dein Ziel. Wenn du unsicher bist, sprich einmal kurz mit deinem Haus- oder Sportarzt. 💪</div>
+      )}
+
+      <div className="lbl" style={{ margin: "4px 4px 8px" }}>Deine Daten</div>
+      <div className="card">
+        <div style={{ display: "flex", gap: 12 }}>
+          <div className="field" style={{ flex: 1 }}>
+            <label className="lbl">Gewicht (kg)</label>
+            <input className="inp" type="number" inputMode="decimal" value={p.weight} onChange={e => set("weight", e.target.value)} />
+          </div>
+          <div className="field" style={{ flex: 1 }}>
+            <label className="lbl">Größe (cm)</label>
+            <input className="inp" type="number" inputMode="numeric" value={p.height} onChange={e => set("height", e.target.value)} />
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 12 }}>
+          <div className="field" style={{ flex: 1 }}>
+            <label className="lbl">Alter</label>
+            <input className="inp" type="number" inputMode="numeric" value={p.age} onChange={e => set("age", e.target.value)} />
+          </div>
+          <div className="field" style={{ flex: 1 }}>
+            <label className="lbl">Geschlecht</label>
+            <div className="seg">
+              <button className={p.sex === "m" ? "on" : ""} onClick={() => set("sex", "m")}>♂</button>
+              <button className={p.sex === "w" ? "on" : ""} onClick={() => set("sex", "w")}>♀</button>
+            </div>
+          </div>
+        </div>
+
+        <div className="field">
+          <label className="lbl">Aktivität</label>
+          <div className="seg">
+            {ACT.map(a => (
+              <button key={a.k} className={p.act === a.k ? "on" : ""} onClick={() => set("act", a.k)}>{a.label}</button>
+            ))}
+          </div>
+        </div>
+
+        <div className="field" style={{ marginBottom: 2 }}>
+          <label className="lbl">Tempo</label>
+          <div className="seg">
+            {PACE.map(a => (
+              <button key={a.k} className={p.pace === a.k ? "on" : ""} onClick={() => set("pace", a.k)}
+                style={{ flexDirection: "column", gap: 2, lineHeight: 1.2 }}>
+                {a.label}<span style={{ fontSize: 9.5, fontWeight: 500, color: p.pace === a.k ? "var(--volt)" : "var(--muted)" }}>{a.d}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="note">
+        Richtwerte nach der Mifflin-St-Jeor-Formel – kein Ersatz für ärztliche Beratung. Dein Whoop zeigt den echten Tagesverbrauch oft genauer; wenn er dauerhaft höher liegt, darfst du etwas mehr essen.
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+
+</script>
+</body>
+</html>
